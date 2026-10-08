@@ -85,6 +85,7 @@ export function HomePage() {
               >
                 {user.name.charAt(0).toUpperCase()}
               </Link>
+              <span className="max-sm:hidden text-sm text-muted-foreground">{user.email}</span>
               <Button
                 variant="ghost"
                 size="icon-sm"
