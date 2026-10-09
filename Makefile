@@ -109,3 +109,7 @@ destroy-frontend: env ## Delete the S3 bucket, CloudFront distribution and domai
 
 infra-lint: ## Lint the CloudFormation templates
 	uvx cfn-lint infra/*.yaml
+report-now:
+	aws sqs send-message \
+	  --queue-url $$(aws cloudformation describe-stacks --stack-name demo-meetings-reports --query "Stacks[0].Outputs[?OutputKey=='QueueUrl'].OutputValue" --output text) \
+	  --message-body '{"week": "$(WEEK)", "source": "manual"}'

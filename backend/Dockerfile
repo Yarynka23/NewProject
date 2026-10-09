@@ -13,7 +13,9 @@ ENV UV_COMPILE_BYTECODE=1 \
 WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
+ENV UV_COMPILE_BYTECODE_TIMEOUT=600
 RUN uv sync --locked --no-install-project
+RUN uv pip install awslambdaric boto3
 
 COPY . .
 
