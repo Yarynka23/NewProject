@@ -44,3 +44,12 @@ export function useCreateParticipant() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: participantsKey }),
   })
 }
+
+export function useDraftMeeting() {
+  return useMutation({
+    mutationFn: (input: { text: string } | { audio: Blob }) =>
+      'text' in input
+        ? api.draftMeetingFromText(input.text)
+        : api.draftMeetingFromAudio(input.audio),
+  })
+}

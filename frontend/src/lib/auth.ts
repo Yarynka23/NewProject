@@ -26,7 +26,7 @@ export type SignupData = { name: string; email: string; password: string }
 export type ConfirmData = { email: string; code: string }
 export type PasswordChangeData = { currentPassword: string; newPassword: string }
 
-// Public Cognito ids, baked in at build time (make deploy-auth writes them to .env).
+// Public Cognito ids, baked in at build time (make deploy writes them to .env).
 const env = import.meta.env
 export const authConfig = {
   userPoolId: env.COGNITO_USER_POOL_ID ?? '',

@@ -16,6 +16,12 @@ make seed    # optional: sample participants and meetings
 
 If port 5432 is already in use on your machine, set `DB_PORT` in `.env` (e.g. `DB_PORT=5433`).
 
+## Create a meeting with AI
+
+**Create with AI** opens a dialog where you describe the meeting by typing or by voice, e.g. *"Sprint planning tomorrow 3–4pm in room 204 with Olena and Taras"*. The backend transcribes speech with OpenAI (`OPENAI_TRANSCRIPTION_MODEL`) and turns the text into form values with OpenAI structured outputs (`OPENAI_MODEL`). It resolves relative dates against your local time and matches people to existing participants. The result opens in the regular meeting form, and nothing is saved until you check it and click **Create meeting**.
+
+Set `OPENAI_API_KEY` in `.env` and restart (`make restart`). Without a key the rest of the app works as usual and the assistant reports that it is not configured. Recordings are limited to 2 minutes.
+
 ## Common commands
 
 Run `make` to list all targets. The most used:
@@ -42,40 +48,38 @@ make dev-frontend   # Vite on :5173, proxies /api to :8000
 
 ## Deploy to AWS
 
-Everything is described with CloudFormation in [`infra/`](infra/) and deployed to `us-east-1` by default (`AWS_REGION` in `.env`):
+Everything is described with Terraform in [`infra/`](infra/) and deployed to `us-east-1` by default (`AWS_REGION` in `.env`). The state is stored in [HCP Terraform](https://app.terraform.io):
 
-- **Backend** (`make deploy-backend`): the backend container on AWS Lambda (via [Lambda Web Adapter](https://github.com/awslabs/aws-lambda-web-adapter), so the FastAPI app runs unchanged), exposed through a public **Lambda function URL**, and its PostgreSQL 17 database on **Aurora Serverless v2 scaling between 0 and 1 ACU**. After 5 idle minutes the database pauses and costs only storage; the first request after that waits about 15 seconds while it resumes. The function runs in the database's private subnets; there is no NAT gateway, load balancer or public IP.
-- **Frontend** (`make deploy-frontend`): the app, built with `VITE_API_URL` set to the function URL, in a private S3 bucket behind CloudFront on **pay-as-you-go** pricing (no flat-rate plan; `PriceClass_100`). The browser calls the function URL directly; the deploy adds the CloudFront address to the backend's CORS origins.
+- **Backend** (`infra/modules/backend`): the backend container on AWS Lambda (via [Lambda Web Adapter](https://github.com/awslabs/aws-lambda-web-adapter), so the FastAPI app runs unchanged), exposed through a public **Lambda function URL**, and its PostgreSQL 17 database on **Aurora Serverless v2 scaling between 0 and 1 ACU**. After 5 idle minutes the database pauses and costs only storage; the first request after that waits about 15 seconds while it resumes. The function runs in the database's private subnets; there is no NAT gateway, load balancer or public IP. The image is tagged with a hash of the backend sources and rebuilt only when they change.
+- **Frontend** (`infra/modules/frontend`): the app, built with `VITE_API_URL` set to the function URL, in a private S3 bucket behind CloudFront on **pay-as-you-go** pricing (`PriceClass_100`). The browser calls the function URL directly; the CloudFront address (and custom domain) are the backend's CORS origins. It is rebuilt and uploaded only when its sources or settings change.
+- **Auth** (`infra/modules/auth`): the Cognito user pool and app client.
 
-1. Put the credentials of an IAM user into `.env` (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`; see `.env.example` for the optional settings). `.env` is gitignored.
-2. `make deploy` (backend, then frontend). It prints the app and API URLs. The first run takes about 20 minutes (database and CloudFront distribution); later runs take a few minutes. Deploy the two parts separately with `make deploy-backend` / `make deploy-frontend`.
-3. `make destroy-frontend` and `make destroy-backend` delete everything except a final database snapshot.
+1. In HCP Terraform, create an organization and a workspace named like `PROJECT_NAME` (CLI-driven workflow), and set the workspace's **Settings → General → Execution Mode** to **Local**: plans and applies run on your machine (they build the Docker image and the frontend), only the state is stored in HCP Terraform.
+2. Put into `.env` the AWS credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`) and the HCP Terraform settings (`TF_TOKEN_app_terraform_io`, `TF_CLOUD_ORGANIZATION`, optionally `TF_WORKSPACE`); see `.env.example`. `.env` is gitignored.
+3. `make tf-init` once, then `make deploy`. It shows the plan, applies it after you confirm, writes the Cognito ids to `.env` (for local runs) and prints the app and API URLs. The first run takes about 20 minutes (database and CloudFront distribution). `make plan` only shows the changes.
+4. `make destroy` deletes everything except the Cognito user pool (with its accounts) and a final database snapshot.
 
-Requires Docker, Node.js and the AWS CLI. `make infra-lint` checks the templates.
+Requires Terraform, Docker, Node.js and the AWS CLI. `make infra-lint` checks the configuration.
 
 ### Custom domain
 
-Once everything is deployed, set the domain in `.env` and attach it:
+Set the domain in `.env` and run `make deploy`:
 
 ```sh
 DOMAIN_NAME=app.example.com
 HOSTED_ZONE_ID=Z0123456789ABC   # optional: only if the domain's DNS is in Route 53
 ```
 
-```sh
-make add-domain
-```
-
-This requests an ACM certificate in `us-east-1` (the only region CloudFront accepts), adds the domain to the CloudFront distribution and to the backend's CORS origins. With `HOSTED_ZONE_ID`, the validation and alias records are created in Route 53 for you. Without it, the command prints the validation CNAME to add at your DNS provider, waits for the certificate, and then prints the CNAME that points the domain at CloudFront. Later `make deploy` runs keep the domain. `make remove-domain` detaches it again (to switch domains: `make remove-domain`, change `DOMAIN_NAME`, `make add-domain`).
+This requests an ACM certificate in `us-east-1` (the only region CloudFront accepts) and adds the domain to the CloudFront distribution, the backend's CORS origins and Cognito's redirect URLs. With `HOSTED_ZONE_ID`, the validation and alias records are created in Route 53. Without it, `make deploy` first prints the validation CNAME to add at your DNS provider, waits for the certificate, and at the end prints the CNAME that points the domain at CloudFront. To remove or switch the domain, change `DOMAIN_NAME` and run `make deploy` again.
 
 ### Tags
 
-Every AWS resource that supports tags is tagged `PROJECT_NAME=<PROJECT_NAME>` (in the templates as `Key: PROJECT_NAME, Value: !Ref ProjectName`, plus stack tags and tags on the SSM parameter). Find the whole app with Resource Groups & Tag Editor, and split out its costs in Billing once `PROJECT_NAME` is activated as a cost allocation tag. `APP_NAME` in older `.env` files still works as the project name.
+Every AWS resource that supports tags is tagged `PROJECT_NAME=<PROJECT_NAME>` (the AWS provider's `default_tags`). Find the whole app with Resource Groups & Tag Editor, and split out its costs in Billing once `PROJECT_NAME` is activated as a cost allocation tag.
 
 ## Layout
 
 ```
 backend/    FastAPI app (app/), Alembic migrations (alembic/), tests (tests/)
 frontend/   Vite + React + shadcn/ui (src/components/ui is generated by shadcn)
-infra/      CloudFormation templates and deploy scripts for AWS
+infra/      Terraform configuration for AWS (modules/: auth, backend, frontend)
 ```

@@ -1,16 +1,17 @@
 import { useState } from 'react'
 import { addDays } from 'date-fns'
-import { LogOutIcon, PlusIcon } from 'lucide-react'
+import { LogOutIcon, PlusIcon, SparklesIcon } from 'lucide-react'
 import { Link } from 'react-router'
 
 import { DateNavigation, ViewSwitcher } from '@/components/calendar-toolbar'
 import { DeleteMeetingDialog } from '@/components/delete-meeting-dialog'
+import { MeetingAssistantDialog } from '@/components/meeting-assistant-dialog'
 import { MeetingDetailsDialog } from '@/components/meeting-details-dialog'
 import { MeetingFormDialog } from '@/components/meeting-form-dialog'
 import { MeetingsView } from '@/components/meetings-view'
 import { Button } from '@/components/ui/button'
 import { useMeetings } from '@/hooks/queries'
-import type { Meeting } from '@/lib/api'
+import type { Meeting, MeetingDraft } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { STEP_DAYS, visibleDays, type ViewMode } from '@/lib/calendar'
 import { formatRange } from '@/lib/format'
@@ -25,6 +26,8 @@ export function HomePage() {
   // Kept after the form closes so the dialog doesn't flip to "Add meeting" while fading out.
   const [meetingToEdit, setMeetingToEdit] = useState<Meeting | null>(null)
   const [newMeetingStart, setNewMeetingStart] = useState<Date | null>(null)
+  const [assistantOpen, setAssistantOpen] = useState(false)
+  const [meetingDraft, setMeetingDraft] = useState<MeetingDraft | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [viewedId, setViewedId] = useState<string | null>(null)
   const [meetingToDelete, setMeetingToDelete] = useState<Meeting | null>(null)
@@ -34,11 +37,20 @@ export function HomePage() {
 
   const openCreate = (start: Date | null = null) => {
     setMeetingToEdit(null)
+    setMeetingDraft(null)
     setNewMeetingStart(start)
+    setFormOpen(true)
+  }
+  // The assistant's details open in the regular form, where the user confirms them.
+  const openDraft = (draft: MeetingDraft) => {
+    setMeetingToEdit(null)
+    setNewMeetingStart(null)
+    setMeetingDraft(draft)
     setFormOpen(true)
   }
   const openEdit = (meeting: Meeting) => {
     setDetailsOpen(false)
+    setMeetingDraft(null)
     setMeetingToEdit(meeting)
     setFormOpen(true)
   }
@@ -71,6 +83,16 @@ export function HomePage() {
         </div>
         <div className="order-2 ml-auto flex items-center gap-2 md:order-3">
           <ViewSwitcher mode={mode} onModeChange={setMode} />
+          <Button
+            variant="outline"
+            onClick={() => setAssistantOpen(true)}
+            aria-label="Create meeting with AI"
+            title="Describe a meeting by text or voice"
+            className="max-sm:px-3"
+          >
+            <SparklesIcon />
+            <span className="max-sm:hidden">Create with AI</span>
+          </Button>
           <Button onClick={() => openCreate()} aria-label="Add meeting" className="max-sm:px-3">
             <PlusIcon />
             <span className="max-sm:hidden">Add meeting</span>
@@ -118,6 +140,12 @@ export function HomePage() {
         onOpenChange={setFormOpen}
         meeting={meetingToEdit}
         initialStart={newMeetingStart}
+        draft={meetingDraft}
+      />
+      <MeetingAssistantDialog
+        open={assistantOpen}
+        onOpenChange={setAssistantOpen}
+        onDraft={openDraft}
       />
       <MeetingDetailsDialog
         meeting={viewedMeeting}

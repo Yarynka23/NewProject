@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated
 
 from pydantic import (
@@ -77,3 +77,24 @@ class MeetingRead(BaseModel):
     @field_serializer("starts_at", "ends_at", "created_at")
     def to_utc(self, value: datetime) -> str:
         return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+class MeetingDraftRequest(BaseModel):
+    text: Annotated[NonEmptyStr, StringConstraints(max_length=5000)]
+    # The user's local wall-clock time, so "tomorrow at 3" resolves in their time zone.
+    now: datetime
+
+
+class MeetingDraft(BaseModel):
+    """Form values guessed from what the user said; every field may be missing."""
+
+    transcript: str
+    title: str | None
+    description: str | None
+    date: date | None
+    start_time: str | None
+    end_time: str | None
+    place: str | None
+    participant_ids: list[uuid.UUID]
+    # Names the user mentioned that match no known participant.
+    unmatched_participants: list[str]
