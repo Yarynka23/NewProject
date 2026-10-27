@@ -113,3 +113,9 @@ report-now:
 	aws sqs send-message \
 	  --queue-url $$(aws cloudformation describe-stacks --stack-name demo-meetings-reports --query "Stacks[0].Outputs[?OutputKey=='QueueUrl'].OutputValue" --output text) \
 	  --message-body '{"week": "$(WEEK)", "source": "manual"}'
+
+llm-hello:
+	python scripts/llm_hello.py
+
+parse:
+	PYTHONPATH=backend python -m app.ai.cli "$(TEXT)"

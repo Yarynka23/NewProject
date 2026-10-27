@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated
 
 from pydantic import (
@@ -10,6 +10,7 @@ from pydantic import (
     StringConstraints,
     field_serializer,
     model_validator,
+    Field
 )
 
 NonEmptyStr = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
@@ -61,7 +62,29 @@ class MeetingCreate(BaseModel):
         self.participant_ids = list(dict.fromkeys(self.participant_ids))
         return self
 
+class AgendaItemData(BaseModel):
+    topic: NonEmptyStr
+    owner: str | None = None
+    minutes: int | None = Field(default=None, ge=1, le=480)
 
+
+class ActionItemData(BaseModel):
+    task: NonEmptyStr
+    owner: str | None = None
+    due: date | None = None
+
+
+class AgendaData(BaseModel):
+    items: list[AgendaItemData]
+    action_items: list[ActionItemData] = []
+
+
+class AgendaSave(BaseModel):
+    agenda: AgendaData
+    # The model's raw suggestion and where it came from, stored next to the saved agenda.
+    ai_suggestion: dict | None = None
+    model: str | None = None
+    prompt_version: str | None = None
 class MeetingRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -73,6 +96,8 @@ class MeetingRead(BaseModel):
     place: str
     participants: list[ParticipantRead]
     created_at: datetime
+    agenda: dict | None = None
+    agenda_ai_meta: dict | None = None
 
     @field_serializer("starts_at", "ends_at", "created_at")
     def to_utc(self, value: datetime) -> str:

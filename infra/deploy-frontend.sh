@@ -16,6 +16,7 @@ main() {
   echo "==> [1/6] Build the frontend (API: $api_base_url)"
   (cd frontend && npm ci && \
     VITE_API_URL="$api_base_url" \
+    VITE_PARSER_URL="https://xbtgrtbcshubpyp5yhoqji5r6a0jorri.lambda-url.us-east-1.on.aws/" \
     COGNITO_USER_POOL_ID="$(output "$AUTH_STACK" UserPoolId)" \
     COGNITO_CLIENT_ID="$(output "$AUTH_STACK" UserPoolClientId)" \
     COGNITO_DOMAIN="$(output "$AUTH_STACK" Domain)" \

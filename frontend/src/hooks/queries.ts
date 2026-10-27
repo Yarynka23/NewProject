@@ -44,3 +44,11 @@ export function useCreateParticipant() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: participantsKey }),
   })
 }
+
+export function useSaveAgenda() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.saveAgenda,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: meetingsKey }),
+  })
+}

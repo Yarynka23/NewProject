@@ -17,6 +17,7 @@ export type Meeting = {
   place: string
   participants: Participant[]
   created_at: string
+  agenda: Agenda | null
 }
 
 export type MeetingCreate = {
@@ -31,6 +32,22 @@ export type MeetingCreate = {
 export type ParticipantCreate = {
   name: string
   email: string
+}
+export type AgendaItem = { topic: string; owner: string | null; minutes: number | null }
+export type ActionItem = { task: string; owner: string | null; due: string | null }
+export type Agenda = { items: AgendaItem[]; action_items: ActionItem[] }
+export type ParsedAgenda = Agenda & {
+  title: string | null
+  starts_at: string | null
+  duration_minutes: number | null
+  language: string
+}
+export type ParseResult = { agenda: ParsedAgenda; model: string; prompt_version: string }
+export type AgendaSave = {
+  agenda: Agenda
+  ai_suggestion: ParsedAgenda | null
+  model: string | null
+  prompt_version: string | null
 }
 
 export class ApiError extends Error {
@@ -90,7 +107,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
 }
-
 export const api = {
   listMeetings: () => request<Meeting[]>('/meetings'),
   createMeeting: (data: MeetingCreate) =>
@@ -101,4 +117,33 @@ export const api = {
   listParticipants: () => request<Participant[]>('/participants'),
   createParticipant: (data: ParticipantCreate) =>
     request<Participant>('/participants', { method: 'POST', body: JSON.stringify(data) }),
+  saveAgenda: ({ id, ...data }: AgendaSave & { id: string }) =>
+    request<Meeting>(`/meetings/${id}/agenda`, { method: 'PUT', body: JSON.stringify(data) }),
+}
+
+const PARSER_URL = import.meta.env.VITE_PARSER_URL ?? ''
+
+export async function parseAgenda(text: string, signal: AbortSignal): Promise<ParseResult> {
+  const token = await getIdToken()
+  const response = await fetch(PARSER_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
+    body: JSON.stringify({
+      text,
+      today: new Date().toLocaleDateString('sv-SE'), // YYYY-MM-DD
+      tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    }),
+    signal,
+  })
+  if (response.status === 401) throw new ApiError(401, 'Session expired, please sign in again')
+  if (response.status === 413)
+    throw new ApiError(413, 'The text is too long (max 10,000 characters)')
+  if (response.status === 422)
+    throw new ApiError(422, 'Could not find an agenda in this text. Try rephrasing it.')
+  if (!response.ok)
+    throw new ApiError(response.status, 'The parser is unavailable, try again later')
+  return response.json() as Promise<ParseResult>
 }

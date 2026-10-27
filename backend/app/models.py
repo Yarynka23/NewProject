@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     CheckConstraint,
     Column,
     DateTime,
@@ -73,6 +74,9 @@ class Meeting(Base):
         ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    agenda: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    agenda_ai_suggestion: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    agenda_ai_meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     participants: Mapped[list[Participant]] = relationship(
         secondary=meeting_participants,

@@ -5,9 +5,11 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    PARSER_MODEL: str = "us.amazon.nova-pro-v1:0"
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str = "postgresql+asyncpg://meetings:meetings@localhost:5432/meetings"
+
     # Lambda serves one request per instance at a time, so it runs with a pool of 1.
     db_pool_size: int = 5
     db_max_overflow: int = 10
