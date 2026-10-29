@@ -104,7 +104,7 @@ export function AuthNotConfigured() {
     <Alert variant="destructive">
       <AlertTitle>Sign-in is not configured</AlertTitle>
       <AlertDescription>
-        Run <code>make deploy-auth</code>, then rebuild the app (<code>make up</code>).
+        Run <code>make deploy</code>, then rebuild the app (<code>make up</code>).
       </AlertDescription>
     </Alert>
   )

@@ -7,8 +7,7 @@ s ?=
 
 .DEFAULT_GOAL := help
 .PHONY: help env build up down restart logs ps migrate migration seed psql test lint format \
-	dev-backend dev-frontend install clean deploy deploy-backend deploy-frontend destroy-backend destroy-frontend add-domain remove-domain infra-lint infra-plan infra-fmt auth-env
-
+    dev-backend dev-frontend install clean tf-init plan deploy cognito-env destroy infra-lint
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(firstword $(MAKEFILE_LIST)) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -74,45 +73,67 @@ dev-frontend: ## Run Vite dev server on http://localhost:5173 (proxies /api to :
 clean: ## Stop the stack and delete the database volume
 	$(COMPOSE) down -v
 
-# AWS credentials and settings come from .env; export them only to the recipes below.
-AWS_ENV := AWS_ACCESS_KEY_ID="$(AWS_ACCESS_KEY_ID)" AWS_SECRET_ACCESS_KEY="$(AWS_SECRET_ACCESS_KEY)" \
-	AWS_SESSION_TOKEN="$(AWS_SESSION_TOKEN)" AWS_REGION="$(AWS_REGION)" \
-	PROJECT_NAME="$(or $(PROJECT_NAME),$(APP_NAME))" CORS_ORIGINS_AWS="$(CORS_ORIGINS_AWS)" \
-	LAMBDA_MEMORY="$(LAMBDA_MEMORY)" DOMAIN_NAME="$(DOMAIN_NAME)" HOSTED_ZONE_ID="$(HOSTED_ZONE_ID)" \
-	GOOGLE_CLIENT_ID="$(GOOGLE_CLIENT_ID)" GOOGLE_CLIENT_SECRET="$(GOOGLE_CLIENT_SECRET)"
+# Terraform in infra/, with its state in HCP Terraform. Credentials and settings come from
+# .env; export them only to the recipes below.
+TF = $(TF_ENV) terraform -chdir=infra
+TF_ENV := AWS_ACCESS_KEY_ID="$(AWS_ACCESS_KEY_ID)" AWS_SECRET_ACCESS_KEY="$(AWS_SECRET_ACCESS_KEY)" \
+	$(if $(AWS_SESSION_TOKEN),AWS_SESSION_TOKEN="$(AWS_SESSION_TOKEN)") AWS_REGION="$(AWS_REGION)" \
+	TF_TOKEN_app_terraform_io="$(TF_TOKEN_app_terraform_io)" \
+	TF_CLOUD_ORGANIZATION="$(TF_CLOUD_ORGANIZATION)" TF_WORKSPACE="$(or $(TF_WORKSPACE),$(PROJECT_NAME),meetings)" \
+	TF_VAR_project_name="$(or $(PROJECT_NAME),meetings)" TF_VAR_aws_region="$(AWS_REGION)" \
+	TF_VAR_lambda_memory="$(or $(LAMBDA_MEMORY),512)" TF_VAR_extra_cors_origins="$(CORS_ORIGINS_AWS)" \
+	TF_VAR_domain_name="$(DOMAIN_NAME)" TF_VAR_hosted_zone_id="$(HOSTED_ZONE_ID)" \
+	TF_VAR_google_client_id="$(GOOGLE_CLIENT_ID)" TF_VAR_google_client_secret="$(GOOGLE_CLIENT_SECRET)"
+COGNITO_KEYS := COGNITO_USER_POOL_ID COGNITO_CLIENT_ID COGNITO_DOMAIN COGNITO_GOOGLE_ENABLED
 
 deploy: deploy-backend deploy-frontend ## Deploy the whole app to AWS (after make auth-env)
+tf-init: env ## Connect infra/ to its HCP Terraform workspace and install the providers
+	@$(TF) init
 
-deploy-backend: env ## Deploy backend (Lambda) + database (Aurora Serverless) to AWS, see infra/
-	@$(AWS_ENV) ./infra/deploy-backend.sh
+plan: env ## Show what make deploy would change on AWS
+	@$(TF) plan
 
-deploy-frontend: env ## Deploy frontend to S3 + CloudFront, wired to the Lambda URL (after deploy-backend)
-	@$(AWS_ENV) ./infra/deploy-frontend.sh
+deploy: env ## Deploy the whole app to AWS (Terraform: infra, backend image, frontend upload)
+ifneq ($(and $(DOMAIN_NAME),$(if $(HOSTED_ZONE_ID),,1)),)
+	@# Without Route 53 the apply waits for a DNS record that is known only once the certificate exists.
+	@$(TF) apply -auto-approve -target=module.frontend.aws_acm_certificate.this
+	@echo "Add this DNS record at your DNS provider (if not done yet); the deploy waits for it:"
+	@echo "  $$($(TF) output -raw certificate_validation_record)"
+endif
+	@$(TF) apply
+	@$(MAKE) --no-print-directory cognito-env
+	@echo "App:  $$($(TF) output -raw app_url) $$($(TF) output -raw custom_domain_url 2>/dev/null)"
+	@echo "API:  $$($(TF) output -raw api_url)"
+	@echo "Docs: $$($(TF) output -raw docs_url)"
+ifneq ($(and $(DOMAIN_NAME),$(if $(HOSTED_ZONE_ID),,1)),)
+	@echo "Point the domain at CloudFront: CNAME $(DOMAIN_NAME) -> $$($(TF) output -raw distribution_domain)"
+endif
 
-add-domain: env ## Attach DOMAIN_NAME from .env to the deployed frontend
-	@$(AWS_ENV) ./infra/add-domain.sh
+cognito-env: ## Write the Cognito settings (public ids) from the deployment to .env for local runs
+	@for key in $(COGNITO_KEYS); do \
+		value="$$($(TF) output -raw "$$(echo $$key | tr A-Z a-z)")" || exit 1; \
+		grep -v "^$$key=" .env > .env.tmp; echo "$$key=$$value" >> .env.tmp; mv .env.tmp .env; \
+	done
+	@echo "Wrote $(COGNITO_KEYS) to .env"
 
-remove-domain: env ## Detach the custom domain and delete its certificate
-	@$(AWS_ENV) ./infra/remove-domain.sh
-
-destroy-backend: env ## Delete the AWS backend stacks (keeps a final DB snapshot)
-	@$(AWS_ENV) ./infra/destroy-backend.sh
-
-destroy-frontend: env ## Delete the S3 bucket, CloudFront distribution and domain certificate
-	@$(AWS_ENV) ./infra/destroy-frontend.sh
-
-infra-lint: ## Lint the CloudFormation templates
-	uvx cfn-lint infra/*.yaml
+destroy: env ## Delete the app from AWS (keeps the Cognito user pool and a final DB snapshot)
+	@# The pool holds every account: dropping it from the state keeps it (and its prevent_destroy).
+	@if $(TF) state list | grep -qx module.auth.aws_cognito_user_pool.this; then \
+		echo "Keeping user pool $$($(TF) output -raw cognito_user_pool_id); delete it with aws cognito-idp delete-user-pool"; \
+		$(TF) state rm module.auth.aws_cognito_user_pool.this; \
+	fi
+	@$(TF) destroy
 report-now:
 	aws sqs send-message \
-	  --queue-url $$(terraform -chdir=infra output -raw queue_url) \
-	  --message-body '{"week": "$(WEEK)", "source": "manual"}'
+		--queue-url $$(terraform -chdir=infra output -raw queue_url) \
+		--message-body '{"week": "$(WEEK)", "source": "manual"}'
 
 llm-hello:
 	python scripts/llm_hello.py
 
 parse:
 	PYTHONPATH=backend python -m app.ai.cli "$(TEXT)"
+
 infra-plan: ## Terraform plan (apply happens only in HCP Terraform after a merge)
 	terraform -chdir=infra plan
 
@@ -121,3 +142,8 @@ infra-fmt: ## Format the Terraform files
 
 auth-env: env ## Write the Cognito settings from Terraform outputs to .env
 	@./infra/auth-env.sh
+
+infra-lint: ## Check formatting and validate the Terraform configuration
+	terraform -chdir=infra fmt -check -recursive
+	terraform -chdir=infra init -backend=false -input=false >/dev/null
+	terraform -chdir=infra validate

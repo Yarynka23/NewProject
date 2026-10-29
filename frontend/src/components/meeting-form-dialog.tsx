@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { addHours, format, isSameDay } from 'date-fns'
-import { CalendarIcon } from 'lucide-react'
+import { addHours, format, isSameDay, parse, parseISO } from 'date-fns'
+import { CalendarIcon, SparklesIcon } from 'lucide-react'
 import { Controller, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
 import { ParticipantPicker } from '@/components/participant-picker'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import {
@@ -22,7 +23,7 @@ import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Textarea } from '@/components/ui/textarea'
 import { useCreateMeeting, useUpdateMeeting } from '@/hooks/queries'
-import type { Meeting } from '@/lib/api'
+import type { Meeting, MeetingDraft } from '@/lib/api'
 
 const timePattern = /^\d{2}:\d{2}$/
 
@@ -77,6 +78,24 @@ function newMeetingValues(start: Date): MeetingFormValues {
   }
 }
 
+/** The assistant's guesses on top of the usual defaults; missing details stay empty. */
+function draftValues(draft: MeetingDraft): MeetingFormValues {
+  const date = draft.date ? parseISO(draft.date) : undefined
+  // No end given: an hour after the start, as for a new meeting.
+  const times = newMeetingValues(
+    parse(draft.start_time ?? defaultValues.startTime, 'HH:mm', date ?? new Date()),
+  )
+  return {
+    title: draft.title ?? '',
+    description: draft.description ?? '',
+    date: date as Date,
+    startTime: times.startTime,
+    endTime: draft.end_time ?? times.endTime,
+    place: draft.place ?? '',
+    participantIds: draft.participant_ids,
+  }
+}
+
 function combine(date: Date, time: string): string {
   const [hours, minutes] = time.split(':').map(Number)
   const result = new Date(date)
@@ -91,9 +110,11 @@ type Props = {
   meeting?: Meeting | null
   /** Prefilled start of a new meeting, e.g. the calendar slot that was clicked. */
   initialStart?: Date | null
+  /** Details from the meeting assistant, for the user to check before creating the meeting. */
+  draft?: MeetingDraft | null
 }
 
-export function MeetingFormDialog({ open, onOpenChange, meeting, initialStart }: Props) {
+export function MeetingFormDialog({ open, onOpenChange, meeting, initialStart, draft }: Props) {
   const [datePickerOpen, setDatePickerOpen] = useState(false)
   const createMeeting = useCreateMeeting()
   const updateMeeting = useUpdateMeeting()
@@ -107,8 +128,14 @@ export function MeetingFormDialog({ open, onOpenChange, meeting, initialStart }:
   useEffect(() => {
     if (!open) return
     if (meeting) form.reset(toFormValues(meeting))
-    else form.reset(initialStart ? newMeetingValues(initialStart) : defaultValues)
-  }, [open, meeting, initialStart, form])
+    else if (draft) {
+      form.reset(draftValues(draft))
+      // Point straight at whatever the assistant couldn't work out.
+      void form.trigger()
+    } else form.reset(initialStart ? newMeetingValues(initialStart) : defaultValues)
+  }, [open, meeting, initialStart, draft, form])
+
+  const isDraft = !isEditing && Boolean(draft)
 
   const close = (next: boolean) => onOpenChange(next)
 
@@ -139,8 +166,14 @@ export function MeetingFormDialog({ open, onOpenChange, meeting, initialStart }:
     <Dialog open={open} onOpenChange={close}>
       <DialogContent className="max-h-[calc(100svh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{isEditing ? 'Edit meeting' : 'Add meeting'}</DialogTitle>
-          <DialogDescription>Fill in the details and pick who takes part.</DialogDescription>
+          <DialogTitle>
+            {isEditing ? 'Edit meeting' : isDraft ? 'Check the meeting' : 'Add meeting'}
+          </DialogTitle>
+          <DialogDescription>
+            {isDraft
+              ? 'The assistant filled this in. Correct anything it got wrong, then create it.'
+              : 'Fill in the details and pick who takes part.'}
+          </DialogDescription>
         </DialogHeader>
 
         {/* Only the fields scroll; header and footer stay put on short screens. */}
@@ -151,6 +184,22 @@ export function MeetingFormDialog({ open, onOpenChange, meeting, initialStart }:
           className="-mx-6 overflow-y-auto px-6 py-1"
         >
           <FieldGroup>
+            {isDraft && draft && (
+              <Alert>
+                <SparklesIcon />
+                <AlertTitle>You said</AlertTitle>
+                <AlertDescription>
+                  <p className="italic">&ldquo;{draft.transcript}&rdquo;</p>
+                  {draft.unmatched_participants.length > 0 && (
+                    <p>
+                      Not in your participants yet:{' '}
+                      <strong>{draft.unmatched_participants.join(', ')}</strong>. Add them below.
+                    </p>
+                  )}
+                </AlertDescription>
+              </Alert>
+            )}
+
             <Controller
               name="title"
               control={form.control}
@@ -293,7 +342,13 @@ export function MeetingFormDialog({ open, onOpenChange, meeting, initialStart }:
             Cancel
           </Button>
           <Button type="submit" form="meeting-form" disabled={isPending}>
-            {isPending ? 'Saving...' : isEditing ? 'Save changes' : 'Add meeting'}
+            {isPending
+              ? 'Saving...'
+              : isEditing
+                ? 'Save changes'
+                : isDraft
+                  ? 'Create meeting'
+                  : 'Add meeting'}
           </Button>
         </DialogFooter>
       </DialogContent>

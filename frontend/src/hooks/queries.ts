@@ -50,5 +50,13 @@ export function useSaveAgenda() {
   return useMutation({
     mutationFn: api.saveAgenda,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: meetingsKey }),
+      })
+}
+export function useDraftMeeting() {
+  return useMutation({
+    mutationFn: (input: { text: string } | { audio: Blob }) =>
+      'text' in input
+        ? api.draftMeetingFromText(input.text)
+        : api.draftMeetingFromAudio(input.audio),
   })
 }

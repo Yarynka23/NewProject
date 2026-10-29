@@ -83,7 +83,7 @@ def get_verifier() -> TokenVerifier:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
             "Authentication is not configured: set COGNITO_USER_POOL_ID and COGNITO_CLIENT_ID "
-            "(make deploy-auth)",
+            "(make deploy)",
         )
     return TokenVerifier(
         settings.cognito_user_pool_id, settings.cognito_client_id, settings.cognito_jwks
