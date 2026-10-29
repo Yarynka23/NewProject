@@ -78,12 +78,16 @@ Resources:
   # Hosted domain for the OAuth endpoints (needed for Google). Prefixes are global.
   UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       UserPoolId: !Ref UserPool
       Domain: !Sub ${ProjectName}-${AWS::AccountId}
 
   GoogleIdentityProvider:
     Type: AWS::Cognito::UserPoolIdentityProvider
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Condition: HasGoogle
     Properties:
       UserPoolId: !Ref UserPool
@@ -101,6 +105,8 @@ Resources:
   # Public client (no secret): the SPA talks to Cognito directly with SRP.
   UserPoolClient:
     Type: AWS::Cognito::UserPoolClient
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       UserPoolId: !Ref UserPool
       ClientName: !Sub ${ProjectName}-web

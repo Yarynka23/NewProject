@@ -1,0 +1,17 @@
+project_name       = "demo-meetings"
+region             = "us-east-1"
+app_urls           = ["http://localhost:5173", "http://localhost:3000", "https://d1heilcd9mjlit.cloudfront.net"]
+google_client_id   = "572833551269-2ukth25aitmburbo7pfkkv5dfhvmampb.apps.googleusercontent.com"
+parser_model       = "us.amazon.nova-pro-v1:0"
+site_origin        = "https://d1heilcd9mjlit.cloudfront.net"
+parser_image_uri   = "631139986111.dkr.ecr.us-east-1.amazonaws.com/demo-meetings-backend:47ca35f-dirty-20261027214454"
+vpc_id             = "vpc-03b4a4a824083d129"
+private_subnet_ids = ["subnet-0636d41d8fd97f439", "subnet-01ceab9a2ad992aac"]
+route_table_ids    = ["rtb-0c9e39a37393f63d0"]
+security_group_id  = "sg-05d30c341b147e33f"
+backend_image_uri  = "631139986111.dkr.ecr.us-east-1.amazonaws.com/demo-meetings-backend:75f31cc-dirty-20261009210203"
+database_endpoint  = "demo-meetings-db.cluster-c4d0msukmeld.us-east-1.rds.amazonaws.com"
+db_user            = "meetings"
+db_name            = "meetings"
+sender_email       = "jaryna.zhvanko@gmail.com"
+recipient_email    = "jaryna.zhvanko@gmail.com"

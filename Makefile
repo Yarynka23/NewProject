@@ -7,7 +7,7 @@ s ?=
 
 .DEFAULT_GOAL := help
 .PHONY: help env build up down restart logs ps migrate migration seed psql test lint format \
-	dev-backend dev-frontend install clean deploy deploy-auth deploy-backend deploy-frontend destroy-auth destroy-backend destroy-frontend add-domain remove-domain infra-lint
+	dev-backend dev-frontend install clean deploy deploy-backend deploy-frontend destroy-backend destroy-frontend add-domain remove-domain infra-lint infra-plan infra-fmt auth-env
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(firstword $(MAKEFILE_LIST)) | \
@@ -81,10 +81,7 @@ AWS_ENV := AWS_ACCESS_KEY_ID="$(AWS_ACCESS_KEY_ID)" AWS_SECRET_ACCESS_KEY="$(AWS
 	LAMBDA_MEMORY="$(LAMBDA_MEMORY)" DOMAIN_NAME="$(DOMAIN_NAME)" HOSTED_ZONE_ID="$(HOSTED_ZONE_ID)" \
 	GOOGLE_CLIENT_ID="$(GOOGLE_CLIENT_ID)" GOOGLE_CLIENT_SECRET="$(GOOGLE_CLIENT_SECRET)"
 
-deploy: deploy-backend deploy-frontend ## Deploy the whole app to AWS (after make deploy-auth)
-
-deploy-auth: env ## Deploy Cognito (user pool + app client), print its settings and write them to .env
-	@$(AWS_ENV) ./infra/deploy-auth.sh
+deploy: deploy-backend deploy-frontend ## Deploy the whole app to AWS (after make auth-env)
 
 deploy-backend: env ## Deploy backend (Lambda) + database (Aurora Serverless) to AWS, see infra/
 	@$(AWS_ENV) ./infra/deploy-backend.sh
@@ -98,9 +95,6 @@ add-domain: env ## Attach DOMAIN_NAME from .env to the deployed frontend
 remove-domain: env ## Detach the custom domain and delete its certificate
 	@$(AWS_ENV) ./infra/remove-domain.sh
 
-destroy-auth: env ## Delete the Cognito stack (the user pool and its accounts are kept)
-	@$(AWS_ENV) ./infra/destroy-auth.sh
-
 destroy-backend: env ## Delete the AWS backend stacks (keeps a final DB snapshot)
 	@$(AWS_ENV) ./infra/destroy-backend.sh
 
@@ -111,7 +105,7 @@ infra-lint: ## Lint the CloudFormation templates
 	uvx cfn-lint infra/*.yaml
 report-now:
 	aws sqs send-message \
-	  --queue-url $$(aws cloudformation describe-stacks --stack-name demo-meetings-reports --query "Stacks[0].Outputs[?OutputKey=='QueueUrl'].OutputValue" --output text) \
+	  --queue-url $$(terraform -chdir=infra output -raw queue_url) \
 	  --message-body '{"week": "$(WEEK)", "source": "manual"}'
 
 llm-hello:
@@ -119,3 +113,11 @@ llm-hello:
 
 parse:
 	PYTHONPATH=backend python -m app.ai.cli "$(TEXT)"
+infra-plan: ## Terraform plan (apply happens only in HCP Terraform after a merge)
+	terraform -chdir=infra plan
+
+infra-fmt: ## Format the Terraform files
+	terraform -chdir=infra fmt
+
+auth-env: env ## Write the Cognito settings from Terraform outputs to .env
+	@./infra/auth-env.sh

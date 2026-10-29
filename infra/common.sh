@@ -75,25 +75,11 @@ app_urls() {
   echo "$urls"
 }
 
-# update_auth_urls: points the Cognito app client's redirect URLs at the current frontend
-# addresses. Every other auth parameter (including the Google client) keeps its value.
+# update_auth_urls: Cognito redirect URLs are Terraform-managed now (app_urls in infra/terraform.tfvars).
 update_auth_urls() {
-  stack_exists "$AUTH_STACK" || return 0
-  local urls
-  urls="$(app_urls)"
-  echo "    App URLs: $urls"
-  aws cloudformation deploy \
-    --stack-name "$AUTH_STACK" \
-    --template-file infra/auth.yaml \
-    --parameter-overrides "AppUrls=$urls" \
-    --tags "${STACK_TAGS[@]}" \
-    --no-fail-on-empty-changeset
+  echo "    Cognito redirect URLs live in infra/terraform.tfvars (app_urls); change them via a pull request."
 }
 
-# require_auth_stack: exits with a hint when Cognito has not been deployed yet.
-require_auth_stack() {
-  stack_exists "$AUTH_STACK" || {
-    echo "Stack $AUTH_STACK not found; run make deploy-auth first." >&2
-    exit 1
-  }
-}
+
+# tf_output NAME: reads an output of the Terraform-managed infrastructure (auth, reports, ai).
+tf_output() { terraform -chdir=infra output -raw "$1"; }

@@ -45,6 +45,8 @@ Resources:
   # ---------------------------------------------------------------- S3 & Endpoint
   ReportsBucket:
     Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     DependsOn: MailerInvokePermission
     Properties:
       BucketName: !Sub ${ProjectName}-reports-${AWS::AccountId}
@@ -75,6 +77,8 @@ Resources:
 
   S3GatewayEndpoint:
     Type: AWS::EC2::VPCEndpoint
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       VpcId: !Ref VpcId
       ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
@@ -84,6 +88,8 @@ Resources:
   # ---------------------------------------------------------------- SQS & DLQ
   ReportRequestsDlq:
     Type: AWS::SQS::Queue
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       QueueName: !Sub ${ProjectName}-report-requests-dlq
       Tags:
@@ -92,6 +98,8 @@ Resources:
 
   ReportRequestsQueue:
     Type: AWS::SQS::Queue
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       QueueName: !Sub ${ProjectName}-report-requests
       VisibilityTimeout: 720
@@ -105,6 +113,8 @@ Resources:
   # ---------------------------------------------------------------- Builder Lambda
   BuilderRole:
     Type: AWS::IAM::Role
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
@@ -129,6 +139,8 @@ Resources:
 
   BuilderFunction:
     Type: AWS::Lambda::Function
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       FunctionName: !Sub ${ProjectName}-report-builder
       PackageType: Image
@@ -154,6 +166,8 @@ Resources:
 
   BuilderSqsMapping:
     Type: AWS::Lambda::EventSourceMapping
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       EventSourceArn: !GetAtt ReportRequestsQueue.Arn
       FunctionName: !Ref BuilderFunction
@@ -162,6 +176,8 @@ Resources:
   # ---------------------------------------------------------------- EventBridge Scheduler
   SchedulerRole:
     Type: AWS::IAM::Role
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
@@ -183,6 +199,8 @@ Resources:
 
   WeeklySchedule:
     Type: AWS::Scheduler::Schedule
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       Name: !Sub ${ProjectName}-weekly-schedule
       ScheduleExpression: "cron(0 7 ? * MON *)"
@@ -197,6 +215,8 @@ Resources:
   # ---------------------------------------------------------------- Mailer Lambda
   MailerRole:
     Type: AWS::IAM::Role
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
@@ -225,6 +245,8 @@ Resources:
 
   MailerFunction:
     Type: AWS::Lambda::Function
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       FunctionName: !Sub ${ProjectName}-report-mailer
       Runtime: python3.12
@@ -281,6 +303,8 @@ Resources:
 
   MailerInvokePermission:
     Type: AWS::Lambda::Permission
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       FunctionName: !Ref MailerFunction
       Action: lambda:InvokeFunction
