@@ -1,0 +1,32 @@
+{
+    "Parameters": [
+        {
+            "ParameterKey": "ParserModel",
+            "DefaultValue": "us.amazon.nova-pro-v1:0",
+            "NoEcho": false
+        },
+        {
+            "ParameterKey": "UserPoolId",
+            "NoEcho": false
+        },
+        {
+            "ParameterKey": "ProjectName",
+            "NoEcho": false
+        },
+        {
+            "ParameterKey": "SiteOrigin",
+            "NoEcho": false,
+            "Description": "?????? ????? ??? ????? ? ?????"
+        },
+        {
+            "ParameterKey": "ImageUri",
+            "NoEcho": false,
+            "Description": "URI ?????? ??????? ? ECR (??? ?????, ?? ? Lab 5)"
+        }
+    ],
+    "Description": "Paste an agenda - parser Lambda (Amazon Nova via Bedrock Converse)",
+    "Capabilities": [
+        "CAPABILITY_IAM"
+    ],
+    "CapabilitiesReason": "The following resource(s) require capabilities: [AWS::IAM::Role]"
+}
