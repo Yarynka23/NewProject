@@ -55,3 +55,11 @@ terraform.rc
 venv/
 agenda-demo.mp4
 tests-out.txt
+venv/
+agenda-demo.mp4
+tests-out.txt
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+infra/mailer.zip
