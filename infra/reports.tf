@@ -233,6 +233,9 @@ resource "aws_lambda_function" "mailer" {
       RECIPIENT_EMAIL = var.recipient_email
     }
   }
+  lifecycle {
+    ignore_changes = [source_code_hash]
+  }
 }
 
 resource "aws_lambda_permission" "mailer_s3" {
